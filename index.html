@@ -288,6 +288,30 @@ function stepFrontier() {
 }
 
 function stepWallFollower() {
+  // Track visit counts to break loops
+  if (!state.wallVisits) state.wallVisits = {};
+  const key = state.px + ',' + state.py;
+  state.wallVisits[key] = (state.wallVisits[key] || 0) + 1;
+
+  // If stuck in a loop (visited 3+ times), pick least-visited neighbor
+  if (state.wallVisits[key] >= 3) {
+    let bestD = -1, bestCount = Infinity;
+    for (let d = 0; d < 4; d++) {
+      const nx = state.px + dirs4[d][0], ny = state.py + dirs4[d][1];
+      if (nx>=0&&nx<W&&ny>=0&&ny<H && state.grid[ny][nx] !== TILE.WALL) {
+        const nk = nx + ',' + ny;
+        const cnt = state.wallVisits[nk] || 0;
+        if (cnt < bestCount) { bestCount = cnt; bestD = d; }
+      }
+    }
+    if (bestD >= 0) {
+      state.wallDir = bestD;
+      moveTo(state.px + dirs4[bestD][0], state.py + dirs4[bestD][1]);
+      return true;
+    }
+  }
+
+  // Standard right-hand rule
   const right = (state.wallDir + 1) % 4;
   const tryOrder = [right, state.wallDir, (state.wallDir + 3) % 4, (state.wallDir + 2) % 4];
   for (const d of tryOrder) {
