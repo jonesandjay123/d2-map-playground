@@ -257,7 +257,11 @@ function revealAround(x, y) {
     for (let dx = -VISION; dx <= VISION; dx++) {
       if (dx*dx + dy*dy > VISION*VISION) continue;
       const nx = x+dx, ny = y+dy;
-      if (nx>=0 && nx<W && ny>=0 && ny<H) state.explored[ny][nx] = 1;
+      if (nx>=0 && nx<W && ny>=0 && ny<H) {
+        state.explored[ny][nx] = 1;
+        if (state.grid[ny][nx] === TILE.EXIT) state.foundExit = true;
+        if (state.grid[ny][nx] === TILE.FAKE_EXIT) state.triedFake = true;
+      }
     }
 }
 
