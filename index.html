@@ -420,7 +420,7 @@ mainCanvas.height = H * CELL;
 
 const COLORS = {
   wall: '#12121a', walk: '#2a2a3a', start: '#1a6b2a',
-  exit: '#8b1a1a', player: '#4a8af5', fog: '#08080c',
+  exit: '#7b2d8e', fake_exit: '#8b1a1a', player: '#4a8af5', fog: '#08080c',
 };
 
 function draw() {
@@ -433,7 +433,8 @@ function draw() {
       const t = state.grid[y][x];
       if (t === TILE.WALL) ctx.fillStyle = COLORS.wall;
       else if (t === TILE.START) ctx.fillStyle = COLORS.start;
-      else if (t === TILE.EXIT) ctx.fillStyle = COLORS.exit;
+      else if (t === TILE.EXIT) ctx.fillStyle = fogOn ? COLORS.fake_exit : COLORS.exit;
+      else if (t === TILE.FAKE_EXIT) ctx.fillStyle = fogOn ? COLORS.fake_exit : '#e67e22';
       else ctx.fillStyle = COLORS.walk;
       ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
     }
