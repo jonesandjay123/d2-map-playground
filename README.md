@@ -1,87 +1,88 @@
 # D2 Map Playground ⚔️
 
-A web-based Diablo II dungeon exploration simulator inspired by the **Durance of Hate Level 2** — one of the most notoriously complex maps in D2R.
+基於 **Diablo II 憎恨囚牢 Level 2** 的網頁版地牢探索模擬器 — D2R 中最複雜的隨機地圖之一。
 
-> **Live Demo:** Open `index.html` in any browser — no server needed!
+> **使用方式：** 直接用瀏覽器打開 `index.html` — 不需要 server！
 
 ![Screenshot Placeholder](screenshot.png)
 
-## What Is This?
+## 這是什麼？
 
-An interactive dungeon map generator + autonomous explorer. Generate random D2-style dungeon layouts (rooms + corridors), then watch AI algorithms navigate through fog of war to find the exit.
+一個互動式地牢地圖生成器 + 自動探索 AI。隨機生成 D2 風格的地牢佈局（房間 + 走廊），然後觀看 AI 演算法在戰爭迷霧中尋找出口。
 
-## How to Run
+## 如何使用
 
 ```bash
-# Just open the file
+# 直接打開
 open index.html
 
-# Or via GitHub Pages (if enabled)
+# 或透過 GitHub Pages（如已啟用）
 # https://jonesandjay123.github.io/d2-map-playground/
 ```
 
-No dependencies. No build step. No npm. Just a browser.
+零依賴。不需要 build。不需要 npm。只要一個瀏覽器。
 
-## Features
+## 功能
 
-- **Random Map Generation** — Seeded PRNG generates rooms + corridors (seed displayed for reproducibility)
-- **Fog of War** — Vision radius of 5 tiles; unexplored areas hidden
-- **3 Navigation Algorithms** — Switch between them in real-time
-- **Minimap** — Overview of explored areas in the corner
-- **Speed Control** — From step-by-step to full-speed exploration
-- **Dark Theme** — D2-inspired aesthetic
+- **隨機地圖生成** — 種子式 PRNG 生成房間 + 走廊（顯示 seed 可重現）
+- **戰爭迷霧** — 視野半徑 5 格，未探索區域隱藏
+- **3 種導航演算法** — 即時切換
+- **小地圖** — 角落顯示已探索區域概覽
+- **速度控制** — 從逐步到全速探索
+- **暗色主題** — D2 風格美學
 
-## Architecture
+## 架構
 
-Single `index.html` file containing:
+單一 `index.html` 檔案，包含：
 
-| Component | Description |
-|-----------|-------------|
-| **Map Generator** | Seeded room placement + L-shaped corridor connections |
-| **Renderer** | HTML5 Canvas with 5px tile grid + minimap overlay |
-| **Fog System** | Circle-based vision reveal (radius 5) with explored/unexplored tracking |
-| **Navigation** | 3 pluggable algorithms (see below) |
-| **Controls** | Button/slider UI for interactive exploration |
+| 元件 | 說明 |
+|------|------|
+| **Map Generator** | 種子式房間放置 + L 形走廊連接 |
+| **Renderer** | HTML5 Canvas，5px 方格 + 小地圖疊加 |
+| **Fog System** | 圓形視野揭露（半徑 5），追蹤已探索/未探索 |
+| **Navigation** | 3 種可切換演算法（見下方）|
+| **Controls** | 按鈕/滑桿 UI 互動操作 |
 
-### Grid Encoding
-- `0` = Wall (impassable)
-- `1` = Walkable floor
-- `2` = Entrance/Start (green)
-- `3` = Exit/Goal (red)
+### Grid 編碼
+- `0` = 牆壁（不可通過）
+- `1` = 可走地板
+- `2` = 入口/起點（綠色）
+- `3` = 出口/目標（紅色）
 
-## Navigation Algorithms
+## 導航演算法
 
-### Frontier Exploration
-Scans all explored tiles for those adjacent to unexplored walkable tiles (frontiers). Picks the nearest frontier by Manhattan distance, then A* pathfinds one step toward it. Efficient and thorough.
+### Frontier Exploration（邊界探索）
+掃描所有已探索的格子，找出與未探索可走格子相鄰的邊界（frontier）。選擇最近的 frontier（曼哈頓距離），然後用 A* 走一步過去。高效且全面。
 
-### Wall Follower (Right-Hand Rule)
-Classic maze-solving: always try to turn right, then go straight, then left, then back. Works well in simply-connected mazes but can loop in complex layouts.
+### Wall Follower（右手法則）
+經典迷宮解法：永遠先嘗試右轉，再直走，再左轉，最後回頭。在簡單連通迷宮中有效，但在複雜佈局可能繞圈。
 
-### A* to Nearest Unexplored
-Finds the closest unexplored walkable tile that borders an explored tile, then A* pathfinds toward it. Similar to frontier but targets the unexplored tile directly.
+### A* to Nearest Unexplored（A* 最近未探索）
+找到最近的未探索可走格子（需與已探索格子相鄰），然後 A* 尋路過去。類似 frontier 但直接瞄準未探索格子。
 
-## Connection to D2R Bot Development
+## 與 D2R Bot 開發的關聯
 
-This project is a stepping stone toward D2R map-reading bots:
+這個專案是 D2R 地圖導航 bot 的前置研究：
 
-1. **Map structure understanding** — How D2 generates dungeon layouts (rooms, corridors, waypoints, exits)
-2. **Exploration algorithms** — Testing which strategies efficiently find exits in D2-style maps
-3. **Fog of war simulation** — Mimics the limited vision a bot has when entering a new area
-4. **Pathfinding** — A* implementation reusable for actual bot navigation
+1. **地圖結構理解** — D2 如何生成地牢佈局（房間、走廊、傳送點、出口）
+2. **探索演算法測試** — 哪種策略在 D2 風格地圖中最快找到出口
+3. **戰爭迷霧模擬** — 模擬 bot 進入新區域時的有限視野
+4. **尋路演算法** — A* 實作可直接用於實際 bot 導航
 
-The Durance of Hate Level 2 is specifically chosen because it's one of the hardest maps to navigate in D2R speedruns — finding the exit quickly is a key optimization.
+選擇憎恨囚牢 Level 2 是因為它是 D2R 速通中最難導航的地圖之一 — 快速找到出口是關鍵優化。
 
-## Roadmap
+## 開發路線
 
-- [ ] Keyboard controls (WASD manual movement)
-- [ ] Map presets (Act 1 caves, Act 2 tombs, Act 3 durance)
-- [ ] Tileset visuals (replace colored squares with tile sprites)
-- [ ] Path visualization (show algorithm's planned route)
-- [ ] Performance metrics (compare algorithms side by side)
-- [ ] Map sharing via seed URL parameter
-- [ ] Waypoint/checkpoint system
-- [ ] More realistic D2 map generation rules
+- [ ] 鍵盤控制（WASD 手動移動）
+- [ ] 地圖預設（Act 1 洞窟、Act 2 古墓、Act 3 憎恨囚牢）
+- [ ] 圖塊視覺化（用 tile sprite 取代色塊）
+- [ ] 路徑視覺化（顯示演算法的計畫路線）
+- [ ] 效能比較（並排比較不同演算法）
+- [ ] 透過 URL 種子參數分享地圖
+- [ ] 傳送點/檢查點系統
+- [ ] 更真實的 D2 地圖生成規則
+- [ ] 匯入真實 D2 地圖資料（DS1/DT1）
 
-## License
+## 授權
 
 MIT
