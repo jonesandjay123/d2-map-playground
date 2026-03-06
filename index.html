@@ -94,6 +94,7 @@ canvas#minimap {
     </select>
   </label>
   <button id="btnFog">Fog: ON</button>
+  <button id="btnTele">Teleport: OFF</button>
 </div>
 
 <div class="stats" id="stats">
@@ -282,6 +283,24 @@ function stepFrontier() {
       }
     }
   if (!best) return false;
+
+  if (state.teleport) {
+    // Teleport: jump directly toward frontier (max 8 tiles, ignoring walls)
+    const dx = best.x - state.px, dy = best.y - state.py;
+    const dist = Math.max(Math.abs(dx), Math.abs(dy));
+    const maxJump = Math.min(dist, 8);
+    const sx = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+    const sy = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+    // Find landing spot: walk the line, land on last walkable tile within range
+    let lx = state.px, ly = state.py;
+    for (let i = 1; i <= maxJump; i++) {
+      const nx = state.px + sx * i, ny = state.py + sy * i;
+      if (nx<0||nx>=W||ny<0||ny>=H) break;
+      if (state.grid[ny][nx] !== TILE.WALL) { lx = nx; ly = ny; }
+    }
+    if (lx !== state.px || ly !== state.py) { moveTo(lx, ly); return true; }
+  }
+
   const path = astar(state.grid, state.px, state.py, best.x, best.y);
   if (path && path.length > 1) { moveTo(path[1].x, path[1].y); return true; }
   return false;
@@ -342,6 +361,22 @@ function stepAstar() {
       if (d < bestDist) { bestDist = d; best = {x, y}; }
     }
   if (!best) return false;
+
+  if (state.teleport) {
+    const dx = best.x - state.px, dy = best.y - state.py;
+    const dist = Math.max(Math.abs(dx), Math.abs(dy));
+    const maxJump = Math.min(dist, 8);
+    const sx = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+    const sy = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+    let lx = state.px, ly = state.py;
+    for (let i = 1; i <= maxJump; i++) {
+      const nx = state.px + sx * i, ny = state.py + sy * i;
+      if (nx<0||nx>=W||ny<0||ny>=H) break;
+      if (state.grid[ny][nx] !== TILE.WALL) { lx = nx; ly = ny; }
+    }
+    if (lx !== state.px || ly !== state.py) { moveTo(lx, ly); return true; }
+  }
+
   const path = astar(state.grid, state.px, state.py, best.x, best.y);
   if (path && path.length > 1) { moveTo(path[1].x, path[1].y); return true; }
   return false;
