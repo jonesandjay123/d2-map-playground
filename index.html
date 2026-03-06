@@ -114,7 +114,7 @@ canvas#minimap {
 // D2 Map Playground — Pure JS dungeon explorer
 // ============================================================
 
-const TILE = { WALL: 0, WALK: 1, START: 2, EXIT: 3 };
+const TILE = { WALL: 0, WALK: 1, START: 2, EXIT: 3, FAKE_EXIT: 4 };
 const CELL = 5;
 const W = 80, H = 80;
 const VISION = 5;
@@ -180,16 +180,22 @@ function generateMap(seed) {
   const sx = Math.floor(sr.x + sr.w / 2), sy = Math.floor(sr.y + sr.h / 2);
   grid[sy][sx] = TILE.START;
 
-  // Place 1-2 exits in distant rooms
-  const numExits = rooms.length > 3 ? 1 + Math.floor(rand() * 2) : 1;
+  // Place 2 exits: Level 1 (fake, closer) + Level 3 (real target, farther)
   const sorted = rooms.slice(1).sort((a, b) => {
     const da = Math.abs(a.x + a.w/2 - sx) + Math.abs(a.y + a.h/2 - sy);
     const db = Math.abs(b.x + b.w/2 - sx) + Math.abs(b.y + b.h/2 - sy);
     return db - da;
   });
-  for (let i = 0; i < Math.min(numExits, sorted.length); i++) {
-    const r = sorted[i];
-    grid[Math.floor(r.y + r.h/2)][Math.floor(r.x + r.w/2)] = TILE.EXIT;
+  if (sorted.length >= 2) {
+    // Farthest = Level 3 (real target)
+    const r3 = sorted[0];
+    grid[Math.floor(r3.y + r3.h/2)][Math.floor(r3.x + r3.w/2)] = TILE.EXIT;
+    // Second farthest = Level 1 (fake)
+    const r1 = sorted[1];
+    grid[Math.floor(r1.y + r1.h/2)][Math.floor(r1.x + r1.w/2)] = TILE.FAKE_EXIT;
+  } else if (sorted.length === 1) {
+    const r3 = sorted[0];
+    grid[Math.floor(r3.y + r3.h/2)][Math.floor(r3.x + r3.w/2)] = TILE.EXIT;
   }
 
   return { grid, startX: sx, startY: sy };
@@ -387,6 +393,10 @@ function moveTo(x, y) {
   state.steps++;
   revealAround(x, y);
   if (state.grid[y][x] === TILE.EXIT) state.foundExit = true;
+  if (state.grid[y][x] === TILE.FAKE_EXIT) {
+    state.triedFake = true;
+    state.grid[y][x] = TILE.WALK; // "entered and came back"
+  }
 }
 
 function doStep() {
