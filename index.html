@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D2 Map Playground — Durance Explorer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f;
+  color: #c4a882;
+  font-family: 'Courier New', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 10px;
+}
+h1 {
+  font-size: 1.4rem;
+  color: #d4a44a;
+  margin-bottom: 8px;
+  text-shadow: 0 0 10px rgba(212,164,74,0.3);
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+  justify-content: center;
+}
+button {
+  background: #1a1a2e;
+  color: #c4a882;
+  border: 1px solid #3a3a5e;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+button:hover { background: #2a2a4e; }
+button.active { background: #3a2a1e; border-color: #d4a44a; }
+select, input[type=range] {
+  background: #1a1a2e;
+  color: #c4a882;
+  border: 1px solid #3a3a5e;
+  padding: 4px 8px;
+  font-family: inherit;
+  border-radius: 3px;
+}
+label { font-size: 0.8rem; }
+.stats {
+  font-size: 0.8rem;
+  margin-bottom: 8px;
+  text-align: center;
+  color: #8a8a9a;
+}
+.stats span { color: #c4a882; margin: 0 6px; }
+.canvas-wrap {
+  position: relative;
+  display: inline-block;
+}
+canvas#main {
+  border: 1px solid #2a2a3e;
+  image-rendering: pixelated;
+}
+canvas#minimap {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 1px solid #3a3a5e;
+  image-rendering: pixelated;
+  background: #000;
+}
+</style>
+</head>
+<body>
+<h1>⚔️ Durance of Hate — Map Explorer</h1>
+
+<div class="controls">
+  <button id="btnNew">New Map</button>
+  <button id="btnStep">Step</button>
+  <button id="btnAuto">Auto Run</button>
+  <label>Speed <input type="range" id="speed" min="1" max="100" value="50"></label>
+  <label>Algo:
+    <select id="algo">
+      <option value="frontier">Frontier Exploration</option>
+      <option value="wallfollow">Wall Follower (Right)</option>
+      <option value="astar">A* Nearest Unexplored</option>
+    </select>
+  </label>
+  <button id="btnFog">Fog: ON</button>
+</div>
+
+<div class="stats" id="stats">
+  Seed: <span id="statSeed">-</span>
+  Steps: <span id="statSteps">0</span>
+  Explored: <span id="statExplored">0%</span>
+  Exit: <span id="statExit">❌</span>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="main"></canvas>
+  <canvas id="minimap" width="160" height="160"></canvas>
+</div>
+
+<script>
+// ============================================================
+// D2 Map Playground — Pure JS dungeon explorer
+// ============================================================
+
+const TILE = { WALL: 0, WALK: 1, START: 2, EXIT: 3 };
+const CELL = 5;
+const W = 80, H = 80;
+const VISION = 5;
+
+// --- Seeded PRNG (mulberry32) ---
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// --- Map Generation ---
+function generateMap(seed) {
+  const rand = mulberry32(seed);
+  const grid = Array.from({ length: H }, () => new Uint8Array(W));
+
+  const rooms = [];
+  const attempts = 120;
+  const minRoom = 4, maxRoom = 12;
+
+  for (let i = 0; i < attempts; i++) {
+    const rw = Math.floor(rand() * (maxRoom - minRoom)) + minRoom;
+    const rh = Math.floor(rand() * (maxRoom - minRoom)) + minRoom;
+    const rx = Math.floor(rand() * (W - rw - 2)) + 1;
+    const ry = Math.floor(rand() * (H - rh - 2)) + 1;
+
+    let ok = true;
+    for (const r of rooms) {
+      if (rx - 1 < r.x + r.w + 1 && rx + rw + 1 > r.x - 1 &&
+          ry - 1 < r.y + r.h + 1 && ry + rh + 1 > r.y - 1) {
+        ok = false; break;
+      }
+    }
+    if (!ok) continue;
+
+    rooms.push({ x: rx, y: ry, w: rw, h: rh });
+    for (let y = ry; y < ry + rh; y++)
+      for (let x = rx; x < rx + rw; x++)
+        grid[y][x] = TILE.WALK;
+  }
+
+  // Connect rooms with corridors
+  for (let i = 1; i < rooms.length; i++) {
+    const a = rooms[i - 1], b = rooms[i];
+    let cx = Math.floor(a.x + a.w / 2), cy = Math.floor(a.y + a.h / 2);
+    const tx = Math.floor(b.x + b.w / 2), ty = Math.floor(b.y + b.h / 2);
+
+    if (rand() < 0.5) {
+      while (cx !== tx) { grid[cy][cx] = TILE.WALK; cx += cx < tx ? 1 : -1; }
+      while (cy !== ty) { grid[cy][cx] = TILE.WALK; cy += cy < ty ? 1 : -1; }
+    } else {
+      while (cy !== ty) { grid[cy][cx] = TILE.WALK; cy += cy < ty ? 1 : -1; }
+      while (cx !== tx) { grid[cy][cx] = TILE.WALK; cx += cx < tx ? 1 : -1; }
+    }
+    grid[cy][cx] = TILE.WALK;
+  }
+
+  // Place start in first room
+  const sr = rooms[0];
+  const sx = Math.floor(sr.x + sr.w / 2), sy = Math.floor(sr.y + sr.h / 2);
+  grid[sy][sx] = TILE.START;
+
+  // Place 1-2 exits in distant rooms
+  const numExits = rooms.length > 3 ? 1 + Math.floor(rand() * 2) : 1;
+  const sorted = rooms.slice(1).sort((a, b) => {
+    const da = Math.abs(a.x + a.w/2 - sx) + Math.abs(a.y + a.h/2 - sy);
+    const db = Math.abs(b.x + b.w/2 - sx) + Math.abs(b.y + b.h/2 - sy);
+    return db - da;
+  });
+  for (let i = 0; i < Math.min(numExits, sorted.length); i++) {
+    const r = sorted[i];
+    grid[Math.floor(r.y + r.h/2)][Math.floor(r.x + r.w/2)] = TILE.EXIT;
+  }
+
+  return { grid, startX: sx, startY: sy };
+}
+
+// --- A* Pathfinding ---
+function astar(grid, sx, sy, gx, gy) {
+  const key = (x, y) => y * W + x;
+  const open = [{ x: sx, y: sy, g: 0, f: Math.abs(gx-sx)+Math.abs(gy-sy) }];
+  const came = new Map();
+  const gScore = new Map(); gScore.set(key(sx,sy), 0);
+  const dirs = [[0,-1],[1,0],[0,1],[-1,0]];
+
+  while (open.length) {
+    open.sort((a,b) => a.f - b.f);
+    const c = open.shift();
+    if (c.x === gx && c.y === gy) {
+      const path = [];
+      let k = key(gx, gy);
+      while (k !== undefined) { path.push({ x: k % W, y: Math.floor(k / W) }); k = came.get(k); }
+      return path.reverse();
+    }
+    for (const [dx, dy] of dirs) {
+      const nx = c.x+dx, ny = c.y+dy;
+      if (nx<0||nx>=W||ny<0||ny>=H||grid[ny][nx]===TILE.WALL) continue;
+      const ng = c.g + 1;
+      const nk = key(nx, ny);
+      if (!gScore.has(nk) || ng < gScore.get(nk)) {
+        gScore.set(nk, ng);
+        came.set(nk, key(c.x, c.y));
+        open.push({ x: nx, y: ny, g: ng, f: ng + Math.abs(gx-nx)+Math.abs(gy-ny) });
+      }
+    }
+  }
+  return null;
+}
+
+// --- State ---
+let state = {};
+let fogOn = true;
+let running = false;
+
+function initState(seed) {
+  if (seed === undefined) seed = Math.floor(Math.random() * 2147483647);
+  const { grid, startX, startY } = generateMap(seed);
+  const explored = Array.from({ length: H }, () => new Uint8Array(W));
+  state = { grid, px: startX, py: startY, explored, steps: 0, seed, foundExit: false, wallDir: 0 };
+  revealAround(startX, startY);
+  running = false;
+  btnAuto.textContent = 'Auto Run';
+  btnAuto.classList.remove('active');
+  updateStats();
+  draw();
+}
+
+function revealAround(x, y) {
+  for (let dy = -VISION; dy <= VISION; dy++)
+    for (let dx = -VISION; dx <= VISION; dx++) {
+      if (dx*dx + dy*dy > VISION*VISION) continue;
+      const nx = x+dx, ny = y+dy;
+      if (nx>=0 && nx<W && ny>=0 && ny<H) state.explored[ny][nx] = 1;
+    }
+}
+
+function countWalkable() {
+  let total = 0, exp = 0;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (state.grid[y][x] !== TILE.WALL) {
+        total++;
+        if (state.explored[y][x]) exp++;
+      }
+  return { total, exp };
+}
+
+// --- Navigation Algorithms ---
+const dirs4 = [[0,-1],[1,0],[0,1],[-1,0]];
+
+function stepFrontier() {
+  let best = null, bestDist = Infinity;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (!state.explored[y][x] || state.grid[y][x] === TILE.WALL) continue;
+      for (const [dx, dy] of dirs4) {
+        const nx = x+dx, ny = y+dy;
+        if (nx>=0&&nx<W&&ny>=0&&ny<H && !state.explored[ny][nx] && state.grid[ny][nx] !== TILE.WALL) {
+          const d = Math.abs(state.px-x)+Math.abs(state.py-y);
+          if (d < bestDist) { bestDist = d; best = {x, y}; }
+          break;
+        }
+      }
+    }
+  if (!best) return false;
+  const path = astar(state.grid, state.px, state.py, best.x, best.y);
+  if (path && path.length > 1) { moveTo(path[1].x, path[1].y); return true; }
+  return false;
+}
+
+function stepWallFollower() {
+  const right = (state.wallDir + 1) % 4;
+  const tryOrder = [right, state.wallDir, (state.wallDir + 3) % 4, (state.wallDir + 2) % 4];
+  for (const d of tryOrder) {
+    const nx = state.px + dirs4[d][0], ny = state.py + dirs4[d][1];
+    if (nx>=0&&nx<W&&ny>=0&&ny<H && state.grid[ny][nx] !== TILE.WALL) {
+      state.wallDir = d;
+      moveTo(nx, ny);
+      return true;
+    }
+  }
+  return false;
+}
+
+function stepAstar() {
+  let best = null, bestDist = Infinity;
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (state.explored[y][x] || state.grid[y][x] === TILE.WALL) continue;
+      let reachable = false;
+      for (const [dx, dy] of dirs4) {
+        const nx = x+dx, ny = y+dy;
+        if (nx>=0&&nx<W&&ny>=0&&ny<H && state.explored[ny][nx] && state.grid[ny][nx] !== TILE.WALL) {
+          reachable = true; break;
+        }
+      }
+      if (!reachable) continue;
+      const d = Math.abs(state.px-x)+Math.abs(state.py-y);
+      if (d < bestDist) { bestDist = d; best = {x, y}; }
+    }
+  if (!best) return false;
+  const path = astar(state.grid, state.px, state.py, best.x, best.y);
+  if (path && path.length > 1) { moveTo(path[1].x, path[1].y); return true; }
+  return false;
+}
+
+function moveTo(x, y) {
+  state.px = x; state.py = y;
+  state.steps++;
+  revealAround(x, y);
+  if (state.grid[y][x] === TILE.EXIT) state.foundExit = true;
+}
+
+function doStep() {
+  const algo = document.getElementById('algo').value;
+  let moved = false;
+  if (algo === 'frontier') moved = stepFrontier();
+  else if (algo === 'wallfollow') moved = stepWallFollower();
+  else if (algo === 'astar') moved = stepAstar();
+  updateStats();
+  draw();
+  return moved;
+}
+
+// --- Rendering ---
+const mainCanvas = document.getElementById('main');
+const ctx = mainCanvas.getContext('2d');
+const miniCanvas = document.getElementById('minimap');
+const mctx = miniCanvas.getContext('2d');
+mainCanvas.width = W * CELL;
+mainCanvas.height = H * CELL;
+
+const COLORS = {
+  wall: '#12121a', walk: '#2a2a3a', start: '#1a6b2a',
+  exit: '#8b1a1a', player: '#4a8af5', fog: '#08080c',
+};
+
+function draw() {
+  ctx.fillStyle = COLORS.fog;
+  ctx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (fogOn && !state.explored[y][x]) continue;
+      const t = state.grid[y][x];
+      if (t === TILE.WALL) ctx.fillStyle = COLORS.wall;
+      else if (t === TILE.START) ctx.fillStyle = COLORS.start;
+      else if (t === TILE.EXIT) ctx.fillStyle = COLORS.exit;
+      else ctx.fillStyle = COLORS.walk;
+      ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    }
+
+  // Player
+  ctx.fillStyle = COLORS.player;
+  ctx.beginPath();
+  ctx.arc(state.px * CELL + CELL/2, state.py * CELL + CELL/2, CELL * 0.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawMinimap();
+}
+
+function drawMinimap() {
+  const scale = 2;
+  miniCanvas.width = W * scale;
+  miniCanvas.height = H * scale;
+  mctx.fillStyle = '#000';
+  mctx.fillRect(0, 0, miniCanvas.width, miniCanvas.height);
+
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (fogOn && !state.explored[y][x]) continue;
+      const t = state.grid[y][x];
+      if (t === TILE.WALL) mctx.fillStyle = '#1a1a22';
+      else if (t === TILE.START) mctx.fillStyle = '#2a8b3a';
+      else if (t === TILE.EXIT) mctx.fillStyle = '#cc3333';
+      else mctx.fillStyle = '#3a3a4a';
+      mctx.fillRect(x * scale, y * scale, scale, scale);
+    }
+
+  mctx.fillStyle = '#5af';
+  mctx.fillRect(state.px * scale, state.py * scale, scale, scale);
+}
+
+function updateStats() {
+  const { total, exp } = countWalkable();
+  document.getElementById('statSeed').textContent = state.seed;
+  document.getElementById('statSteps').textContent = state.steps;
+  document.getElementById('statExplored').textContent = total ? Math.round(exp/total*100) + '%' : '0%';
+  document.getElementById('statExit').textContent = state.foundExit ? '✅ Found!' : '❌';
+}
+
+// --- Controls ---
+const btnAuto = document.getElementById('btnAuto');
+const btnFog = document.getElementById('btnFog');
+
+document.getElementById('btnNew').addEventListener('click', () => initState());
+document.getElementById('btnStep').addEventListener('click', () => { if (!running) doStep(); });
+
+btnAuto.addEventListener('click', () => {
+  running = !running;
+  btnAuto.textContent = running ? 'Stop' : 'Auto Run';
+  btnAuto.classList.toggle('active', running);
+  if (running) autoLoop();
+});
+
+btnFog.addEventListener('click', () => {
+  fogOn = !fogOn;
+  btnFog.textContent = fogOn ? 'Fog: ON' : 'Fog: OFF';
+  draw();
+});
+
+function autoLoop() {
+  if (!running) return;
+  const speed = parseInt(document.getElementById('speed').value);
+  const stepsPerFrame = Math.max(1, Math.floor(speed / 10));
+  for (let i = 0; i < stepsPerFrame; i++) {
+    if (!doStep()) { running = false; btnAuto.textContent = 'Auto Run'; btnAuto.classList.remove('active'); return; }
+  }
+  const delay = Math.max(1, 110 - speed);
+  setTimeout(() => requestAnimationFrame(autoLoop), delay);
+}
+
+// Init
+initState();
+</script>
+</body>
+</html>
