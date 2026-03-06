@@ -487,6 +487,12 @@ btnFog.addEventListener('click', () => {
   draw();
 });
 
+const btnTele = document.getElementById('btnTele');
+btnTele.addEventListener('click', () => {
+  state.teleport = !state.teleport;
+  btnTele.textContent = state.teleport ? 'Teleport: ON' : 'Teleport: OFF';
+});
+
 function autoLoop() {
   if (!running) return;
   const speed = parseInt(document.getElementById('speed').value);
